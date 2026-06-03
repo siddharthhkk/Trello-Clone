@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organization - Trello Clone</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f5f7; color: #172b4d; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 24px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        h1, h2, h3 { color: #172b4d; margin-top: 0; }
+        a { color: #0079bf; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        input, select, button, textarea { padding: 10px; margin: 5px 0; width: 100%; font-size: 14px; }
+        button, .btn { background-color: #0079bf; color: white; border: none; cursor: pointer; border-radius: 4px; display: inline-block; text-align: center; width: auto; padding: 10px 16px; text-decoration: none; }
+        button:hover, .btn:hover { background-color: #026aa7; }
+        button.secondary, .btn.secondary { background-color: #6b778c; }
+        button.danger, .btn.danger { background-color: #eb5a46; }
+        button.danger:hover, .btn.danger:hover { background-color: #cf513d; }
+        .nav { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #dfe1e6; }
+        .message { margin-top: 10px; padding: 10px; border-radius: 4px; }
+        .message.success { background: #e3fcef; color: #006644; }
+        .message.error { background: #ffebe6; color: #bf2600; }
+        .card-list { display: grid; gap: 12px; margin: 16px 0; }
+        .card { background: #ebecf0; padding: 14px; border-radius: 6px; }
+        .card h3 { margin: 0 0 8px; }
+        .card p { margin: 0 0 12px; color: #5e6c84; }
+        .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .form-row { margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a class="btn secondary" href="orgs.html">All Orgs</a>
+            <span id="adminLink"></span>
+            <button class="secondary" onclick="logout()" style="margin-left:auto;">Logout</button>
+        </div>
+
+        <h1 id="orgTitle">Organization</h1>
+        <p id="orgDescription"></p>
+
+        <h2>Boards</h2>
+        <div id="boardsList" class="card-list"></div>
+
+        <div id="createBoardSection">
+            <h2>Create Board</h2>
+            <div class="form-row">
+                <input type="text" id="boardTitle" placeholder="Board title">
+            </div>
+            <div class="form-row">
+                <input type="text" id="boardDisc" placeholder="Board description">
+            </div>
+            <button onclick="createBoard()">Create Board</button>
+        </div>
+        <p id="message"></p>
+    </div>
+    <script src="api.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('redirecting')
+
+        const orgId = requireQueryParam('orgId') // from URL: org.html?orgId=1
+        let isAdmin = false
+
+        // Load org details → Week10.js GET /organization?orgId=
+        async function loadOrg() {
+            const { response, data } = await apiFetch(`/organization?orgId=${orgId}`)
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not load organization', true)
+                return
+            }
+
+            const org = data.org
+            isAdmin = org.isAdmin
+            document.getElementById('orgTitle').innerText = org.title
+            document.getElementById('orgDescription').innerText = org.description || ''
+
+            const adminLink = document.getElementById('adminLink')
+            if (isAdmin) {
+                // Admin-only: manage members + create boards
+                adminLink.innerHTML = `<a class="btn" href="admin-members.html?orgId=${orgId}">Manage Members</a>`
+                document.getElementById('createBoardSection').style.display = 'block'
+            } else {
+                adminLink.innerHTML = ''
+                document.getElementById('createBoardSection').style.display = 'none'
+            }
+
+            loadBoards()
+        }
+
+        // List boards in this org → Week10.js GET /board?orgId=
+        async function loadBoards() {
+            const { response, data } = await apiFetch(`/board?orgId=${orgId}`)
+            const list = document.getElementById('boardsList')
+            list.innerHTML = ''
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not load boards', true)
+                return
+            }
+
+            if (!data.board || data.board.length === 0) {
+                list.innerHTML = '<p>No boards yet.</p>'
+                return
+            }
+
+            data.board.forEach(board => {
+                const div = document.createElement('div')
+                div.className = 'card'
+                // "Open Board" → board.html with boardId + orgId
+                div.innerHTML = `
+                    <h3>${board.title}</h3>
+                    <p>${board.description || 'No description'}</p>
+                    <div class="card-actions">
+                        <a class="btn" href="board.html?boardId=${board.boardId}&orgId=${orgId}">Open Board</a>
+                        ${isAdmin ? `<button class="danger" onclick="deleteBoard(${board.boardId})">Delete</button>` : ''}
+                    </div>
+                `
+                list.appendChild(div)
+            })
+        }
+
+        // Admin only → Week10.js POST /board
+        async function createBoard() {
+            const boardTitle = document.getElementById('boardTitle').value.trim()
+            const boardDisc = document.getElementById('boardDisc').value.trim()
+
+            if (!boardTitle) {
+                showMessage('message', 'Board title is required', true)
+                return
+            }
+
+            const { response, data } = await apiFetch('/board', {
+                method: 'POST',
+                body: JSON.stringify({
+                    orgId: parseInt(orgId),
+                    boardTitle,
+                    boardDisc
+                })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not create board', true)
+                return
+            }
+
+            showMessage('message', data.message)
+            document.getElementById('boardTitle').value = ''
+            document.getElementById('boardDisc').value = ''
+            loadBoards()
+        }
+
+        // Admin only → Week10.js DELETE /board
+        async function deleteBoard(boardId) {
+            if (!confirm('Delete this board and all its cards?')) return
+
+            const { response, data } = await apiFetch('/board', {
+                method: 'DELETE',
+                body: JSON.stringify({ boardId })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not delete board', true)
+                return
+            }
+
+            showMessage('message', data.message)
+            loadBoards()
+        }
+
+        loadOrg() // run on page load
+    </script>
+</body>
+</html>

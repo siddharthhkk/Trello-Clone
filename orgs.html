@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organizations - Trello Clone</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f5f7; color: #172b4d; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 24px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        h1, h2, h3 { color: #172b4d; margin-top: 0; }
+        a { color: #0079bf; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        input, select, button, textarea { padding: 10px; margin: 5px 0; width: 100%; font-size: 14px; }
+        button, .btn { background-color: #0079bf; color: white; border: none; cursor: pointer; border-radius: 4px; display: inline-block; text-align: center; width: auto; padding: 10px 16px; text-decoration: none; }
+        button:hover, .btn:hover { background-color: #026aa7; }
+        button.secondary, .btn.secondary { background-color: #6b778c; }
+        .nav { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #dfe1e6; }
+        .message { margin-top: 10px; padding: 10px; border-radius: 4px; }
+        .message.success { background: #e3fcef; color: #006644; }
+        .message.error { background: #ffebe6; color: #bf2600; }
+        .card-list { display: grid; gap: 12px; margin: 16px 0; }
+        .card { background: #ebecf0; padding: 14px; border-radius: 6px; }
+        .card h3 { margin: 0 0 8px; }
+        .card p { margin: 0 0 12px; color: #5e6c84; }
+        .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .form-row { margin-bottom: 12px; }
+        .badge { display: inline-block; background: #dfe1e6; color: #42526e; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <h1 style="margin-right:auto;">My Organizations</h1>
+            <button class="secondary" onclick="logout()">Logout</button>
+        </div>
+
+        <div id="orgsList" class="card-list"></div>
+
+        <h2>Create Organization</h2>
+        <div class="form-row">
+            <input type="text" id="orgTitle" placeholder="Organization title">
+        </div>
+        <div class="form-row">
+            <input type="text" id="orgDescription" placeholder="Description">
+        </div>
+        <button onclick="createOrg()">Create Organization</button>
+        <p id="message"></p>
+    </div>
+    <script src="api.js"></script>
+    <script>
+        // Protected page — needs token from signin
+        if (!requireAuth()) throw new Error('redirecting')
+
+        // Fetch orgs user belongs to → Week10.js GET /organizations
+        async function loadOrganizations() {
+            const { response, data } = await apiFetch('/organizations')
+            const list = document.getElementById('orgsList')
+            list.innerHTML = ''
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not load organizations', true)
+                return
+            }
+
+            if (!data.organizations || data.organizations.length === 0) {
+                list.innerHTML = '<p>No organizations yet. Create one below.</p>'
+                return
+            }
+
+            data.organizations.forEach(org => {
+                const div = document.createElement('div')
+                div.className = 'card'
+                // "Open" links to org.html with orgId in URL
+                div.innerHTML = `
+                    <h3>${org.title}</h3>
+                    <p>${org.description || 'No description'}</p>
+                    <span class="badge">${org.isAdmin ? 'Admin' : 'Member'}</span>
+                    <div class="card-actions">
+                        <a class="btn" href="org.html?orgId=${org.orgId}">Open</a>
+                    </div>
+                `
+                list.appendChild(div)
+            })
+        }
+
+        // Create new org → Week10.js POST /organization
+        async function createOrg() {
+            const title = document.getElementById('orgTitle').value.trim()
+            const description = document.getElementById('orgDescription').value.trim()
+
+            if (!title) {
+                showMessage('message', 'Organization title is required', true)
+                return
+            }
+
+            const { response, data } = await apiFetch('/organization', {
+                method: 'POST',
+                body: JSON.stringify({ title, description })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not create organization', true)
+                return
+            }
+
+            showMessage('message', data.message)
+            document.getElementById('orgTitle').value = ''
+            document.getElementById('orgDescription').value = ''
+            loadOrganizations() // refresh list after create
+        }
+
+        loadOrganizations() // run on page load
+    </script>
+</body>
+</html>

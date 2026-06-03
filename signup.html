@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Trello Clone</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f5f7; color: #172b4d; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 24px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        h1, h2, h3 { color: #172b4d; margin-top: 0; }
+        a { color: #0079bf; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        input, select, button, textarea { padding: 10px; margin: 5px 0; width: 100%; font-size: 14px; }
+        button, .btn { background-color: #0079bf; color: white; border: none; cursor: pointer; border-radius: 4px; display: inline-block; text-align: center; width: auto; padding: 10px 16px; text-decoration: none; }
+        button:hover, .btn:hover { background-color: #026aa7; }
+        .form-row { margin-bottom: 12px; }
+        .message { margin-top: 10px; padding: 10px; border-radius: 4px; }
+        .message.success { background: #e3fcef; color: #006644; }
+        .message.error { background: #ffebe6; color: #bf2600; }
+        .auth-links { margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sign Up</h1>
+        <div class="form-row">
+            <input type="text" id="username" placeholder="Username">
+        </div>
+        <div class="form-row">
+            <input type="password" id="password" placeholder="Password">
+        </div>
+        <button onclick="signup()">Create Account</button>
+        <p id="message"></p>
+        <p class="auth-links">Already have an account? <a href="signin.html">Sign in</a></p>
+    </div>
+    <script src="api.js"></script>
+    <script>
+        // Creates a new user → Week10.js POST /signup
+        async function signup() {
+            const username = document.getElementById('username').value.trim()
+            const password = document.getElementById('password').value
+
+            if (!username || !password) {
+                showMessage('message', 'Username and password are required', true)
+                return
+            }
+
+            try {
+                const { response, data } = await apiFetch('/signup', {
+                    method: 'POST',
+                    auth: false, // no token needed for signup
+                    body: JSON.stringify({ username, password })
+                })
+                if (!response.ok) {
+                    showMessage('message', data.message || 'Signup failed', true)
+                    return
+                }
+                showMessage('message', data.message)
+                setTimeout(() => {
+                    window.location.href = 'signin.html' // go sign in after success
+                }, 800)
+            } catch (err) {
+                showMessage('message', 'Could not reach server', true)
+                console.error(err)
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board - Trello Clone</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f5f7; color: #172b4d; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 24px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        .container-wide { max-width: 1200px; }
+        h1, h2, h3 { color: #172b4d; margin-top: 0; }
+        a { color: #0079bf; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        input, select, button, textarea { padding: 10px; margin: 5px 0; width: 100%; font-size: 14px; }
+        button, .btn { background-color: #0079bf; color: white; border: none; cursor: pointer; border-radius: 4px; display: inline-block; text-align: center; width: auto; padding: 10px 16px; text-decoration: none; }
+        button:hover, .btn:hover { background-color: #026aa7; }
+        button.secondary, .btn.secondary { background-color: #6b778c; }
+        button.danger, .btn.danger { background-color: #eb5a46; }
+        button.danger:hover, .btn.danger:hover { background-color: #cf513d; }
+        .nav { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #dfe1e6; }
+        .message { margin-top: 10px; padding: 10px; border-radius: 4px; }
+        .message.success { background: #e3fcef; color: #006644; }
+        .message.error { background: #ffebe6; color: #bf2600; }
+        .form-row { margin-bottom: 12px; }
+        .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .board-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; }
+        .column { background: #ebecf0; border-radius: 8px; padding: 12px; min-height: 200px; }
+        .column h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+        .issue-card { background: white; padding: 10px; border-radius: 4px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+        .issue-card select { margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container container-wide">
+        <div class="nav">
+            <a class="btn secondary" id="backToOrg" href="orgs.html">Back to Org</a>
+            <button class="secondary" onclick="logout()" style="margin-left:auto;">Logout</button>
+        </div>
+
+        <h1 id="boardTitle">Board</h1>
+        <p id="boardDescription"></p>
+
+        <h2>Add Card</h2>
+        <div class="form-row">
+            <input type="text" id="issueTitle" placeholder="Card title">
+        </div>
+        <button onclick="createIssue()">Add Card</button>
+        <p id="message"></p>
+
+        <div class="board-columns" id="columns"></div>
+    </div>
+    <script src="api.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('redirecting')
+
+        const boardId = requireQueryParam('boardId') // from URL: board.html?boardId=1
+        const orgId = getQueryParam('orgId') || '1'
+        document.getElementById('backToOrg').href = `org.html?orgId=${orgId}`
+
+        // Card columns — matches issue.state in Week10.js
+        const STATES = [
+            { key: 'to_do', label: 'To Do' },
+            { key: 'in_progress', label: 'In Progress' },
+            { key: 'done', label: 'Done' },
+            { key: 'archived', label: 'Archived' }
+        ]
+
+        // Build kanban columns from issues array (frontend only, no API call)
+        function renderColumns(issues) {
+            const columnsEl = document.getElementById('columns')
+            columnsEl.innerHTML = ''
+
+            STATES.forEach(state => {
+                const column = document.createElement('div')
+                column.className = 'column'
+                column.innerHTML = `<h3>${state.label}</h3>`
+
+                issues.filter(issue => issue.state === state.key).forEach(issue => {
+                    const card = document.createElement('div')
+                    card.className = 'issue-card'
+                    card.innerHTML = `
+                        <strong>${issue.title}</strong>
+                        <select onchange="moveIssue(${issue.issueId}, this.value)">
+                            ${STATES.map(s => `<option value="${s.key}" ${s.key === issue.state ? 'selected' : ''}>${s.label}</option>`).join('')}
+                        </select>
+                        <div class="card-actions" style="margin-top:8px;">
+                            <button class="secondary" onclick="renameIssue(${issue.issueId}, '${issue.title.replace(/'/g, "\\'")}')">Rename</button>
+                            <button class="danger" onclick="deleteIssue(${issue.issueId})">Delete</button>
+                        </div>
+                    `
+                    column.appendChild(card)
+                })
+
+                columnsEl.appendChild(column)
+            })
+        }
+
+        // Load board + all cards → Week10.js GET /issues?boardId=
+        async function loadBoard() {
+            const { response, data } = await apiFetch(`/issues?boardId=${boardId}`)
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not load board', true)
+                return
+            }
+
+            if (data.board) {
+                document.getElementById('boardTitle').innerText = data.board.title
+                document.getElementById('boardDescription').innerText = data.board.description || ''
+            }
+
+            renderColumns(data.issue || [])
+        }
+
+        // New card → Week10.js POST /issues
+        async function createIssue() {
+            const title = document.getElementById('issueTitle').value.trim()
+            if (!title) {
+                showMessage('message', 'Card title is required', true)
+                return
+            }
+
+            const { response, data } = await apiFetch('/issues', {
+                method: 'POST',
+                body: JSON.stringify({ boardId: parseInt(boardId), title })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not create card', true)
+                return
+            }
+
+            showMessage('message', data.message)
+            document.getElementById('issueTitle').value = ''
+            loadBoard()
+        }
+
+        // Move card to another column → Week10.js PUT /issues (state field)
+        async function moveIssue(issueId, state) {
+            const { response, data } = await apiFetch('/issues', {
+                method: 'PUT',
+                body: JSON.stringify({ boardId: parseInt(boardId), issueId, state })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not move card', true)
+                loadBoard()
+            }
+        }
+
+        // Rename card → Week10.js PUT /issues (afterTitle field)
+        async function renameIssue(issueId, currentTitle) {
+            const afterTitle = prompt('New card title:', currentTitle)
+            if (!afterTitle || afterTitle.trim() === currentTitle) return
+
+            const { response, data } = await apiFetch('/issues', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    boardId: parseInt(boardId),
+                    issueId,
+                    afterTitle: afterTitle.trim()
+                })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not rename card', true)
+                return
+            }
+
+            loadBoard()
+        }
+
+        // Remove card → Week10.js DELETE /issues
+        async function deleteIssue(issueId) {
+            if (!confirm('Delete this card?')) return
+
+            const { response, data } = await apiFetch('/issues', {
+                method: 'DELETE',
+                body: JSON.stringify({ boardId: parseInt(boardId), issueId })
+            })
+
+            if (!response.ok) {
+                showMessage('message', data.message || 'Could not delete card', true)
+                return
+            }
+
+            loadBoard()
+        }
+
+        loadBoard() // run on page load
+    </script>
+</body>
+</html>

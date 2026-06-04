@@ -5,7 +5,7 @@ const express = require('express')
 const path = require('path')
 const cors = require('cors')
 const jwt = require('jsonwebtoken')
-const createAuthMiddleware = require('./Week10MiddleWare')
+const createAuthMiddleware = require('./middlewares')
 
 const app = express()
 const SECRET_KEY = 'secrethai'

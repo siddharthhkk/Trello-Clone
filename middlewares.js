@@ -15,7 +15,7 @@ function createAuthMiddleware(secretKey) {
             } else {
                 return res.status(403).json({ message: 'Unauthorized' })
             }
-        } catch {
+                } catch (err) {
             return res.status(403).json({ message: 'Invalid token' })
         }
     }
